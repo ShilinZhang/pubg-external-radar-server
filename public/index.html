@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="cn">
+<head>
+    <meta charset="UTF-8">
+    <title>Radar</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+    <!-- 引入脚本 -->
+ 
+    <script type="application/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/stomp.js/2.3.3/stomp.min.js"></script>
+    <script type="application/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/jquery/1.12.3/jquery.min.js"></script>
+    <script type="application/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/vue/2.6.10/vue.js"></script>
+    <script type="application/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/axios/0.19.0/axios.min.js"></script>
+    <script type="application/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/openlayers/4.6.5/ol.js"></script>
+    <script type="application/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.2.1/proj4.js"></script>
+    <script type="application/javascript" src="https://epsg.io/21781-1753.js"></script>
+    <script src="/socket.io/socket.io.js"></script>
+    <!-- 引入CSS -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/openlayers/4.6.5/ol.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bulma/0.9.4/css/bulma.min.css">
+    <link rel="stylesheet" href="/css/app.css">
+</head>
+<body>
+<div id="app">
+
+    <!-- 菜单显隐按钮 -->
+    <button class="button is-primary" id="toggleMenu" @click="toggleMenu">菜单</button>
+
+    <!-- Sidebar -->
+    <div class="sidenav" id="navBox" v-show="isMenuVisible">
+        <section class="section">
+            <!-- Follow Target -->
+            <div class="field">
+                <label class="label">跟随目标:</label>
+                <div class="control">
+                    <div class="select is-fullwidth">
+                        <select id="followIDa" title="选择玩家" v-model="followID" :disabled="isLocked">
+                            <!-- 玩家列表选项将在这里填充 -->
+                            <option v-for="player in dropDownBoxPlayers" :key="player.id" :value="player.id">
+                                {{ player.name }}
+                            </option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 锁定按钮 -->
+<!--            <div class="field">-->
+<!--                <label class="label">锁定目标[有BUG]:</label>-->
+<!--                <div class="control">-->
+<!--                    <label class="checkbox">-->
+<!--                        <input type="checkbox" v-model="isLocked"> 锁定当前目标-->
+<!--                    </label>-->
+<!--                </div>-->
+<!--            </div>-->
+
+            <!-- Map Settings -->
+            <div class="field">
+                <label class="label">地图设置:</label>
+                <div class="control">
+                    <label class="checkbox">
+                        <input type="checkbox" id="followme" v-model="followMe"> 视线跟随[缩放时关闭]
+                    </label>
+                    <label class="checkbox">
+                        <input type="checkbox" id="followrot" v-model="followRot"> 角度跟随
+                    </label>
+                </div>
+            </div>
+
+            <!-- Display Settings -->
+            <div class="field">
+                <label class="label">显示设置:</label>
+                <div class="control">
+                    <label class="checkbox">
+                        <input type="checkbox" id="showName" v-model="showName"> 名字
+                    </label>
+                    <label class="checkbox">
+                        <input type="checkbox" id="showHp" v-model="showHp"> 血量
+                    </label>
+                    <label class="checkbox">
+                        <input type="checkbox" id="showFriend" v-model="showFriend"> 队友
+                    </label>
+                    <label class="checkbox">
+                        <input type="checkbox" id="showAirdrop" v-model="showAirdrop"> 空投
+                    </label>
+                    <label class="checkbox">
+                        <input type="checkbox" id="showVehicles" v-model="showVehicles"> 载具
+                    </label>
+                    <label class="checkbox">
+                        <input type="checkbox" id="showVehiclesName" v-model="showVehiclesName"> 载具名称
+                    </label>
+                    <label class="checkbox">
+                        <input type="checkbox" id="showInformation" v-model="showInformation"> 战局信息[手机禁用]
+                    </label>
+                </div>
+            </div>
+
+            <!-- 标签大小调节 -->
+            <div class="field">
+                <label class="label">标签大小调节:</label>
+                <div class="control">
+                    <input type="number" v-model="iconSize" min="10" max="100" class="input" placeholder="标签半径">
+                </div>
+            </div>
+
+            <!-- 射线设置 -->
+            <div class="field">
+                <label class="label">射线设置:</label>
+
+                <!-- 敌人射线 -->
+                <div class="control">
+                    <label class="label">敌人射线:</label>
+                    <div class="field is-horizontal">
+                        <div class="field-body">
+                            <div class="field">
+                                <label class="label">长度:</label>
+                                <input type="number" v-model="enemyLine.length" class="input" min="1">
+                            </div>
+                            <div class="field">
+                                <label class="label">宽度:</label>
+                                <input type="number" v-model="enemyLine.width" class="input" min="1">
+                            </div>
+                            <div class="field">
+                                <label class="label">颜色:</label>
+                                <input type="color" v-model="enemyLine.color" class="input">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 自己射线 -->
+                <div class="control">
+                    <label class="label">自己射线:</label>
+                    <div class="field is-horizontal">
+                        <div class="field-body">
+                            <div class="field">
+                                <label class="label">长度:</label>
+                                <input type="number" v-model="selfLine.length" class="input" min="1">
+                            </div>
+                            <div class="field">
+                                <label class="label">宽度:</label>
+                                <input type="number" v-model="selfLine.width" class="input" min="1">
+                            </div>
+                            <div class="field">
+                                <label class="label">颜色:</label>
+                                <input type="color" v-model="selfLine.color" class="input">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 队友射线 -->
+                <div class="control">
+                    <label class="label">队友射线:</label>
+                    <div class="field is-horizontal">
+                        <div class="field-body">
+                            <div class="field">
+                                <label class="label">长度:</label>
+                                <input type="number" v-model="friendLine.length" class="input" min="1">
+                            </div>
+                            <div class="field">
+                                <label class="label">宽度:</label>
+                                <input type="number" v-model="friendLine.width" class="input" min="1">
+                            </div>
+                            <div class="field">
+                                <label class="label">颜色:</label>
+                                <input type="color" v-model="friendLine.color" class="input">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <!-- Map Container -->
+    <div id="map"></div>
+
+    <!-- Scoreboard: Only visible when showInformation is true -->
+    <div v-show="showInformation" class="scoreboard">
+        <table class="table is-bordered is-striped is-narrow is-hoverable is-fullwidth">
+            <thead>
+            <tr>
+                <th>队伍</th>
+                <th>名字</th>
+                <th>段位</th>
+                <th>KD</th>
+                <th>击杀</th>
+                <th>等级</th>
+            </tr>
+            </thead>
+            <tbody>
+            <tr v-for="player in scoreboardPlayers" :key="player.id">
+                <td>{{ player.team }}</td>
+                <td>{{ player.name }}</td>
+                <td>{{ player.rank }}</td>
+                <td>{{ player.kd }}</td>
+                <td>{{ player.kills }}</td>
+                <td>{{ player.level }}</td>
+            </tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script src="/js/run.js"></script>
+
+<!-- Vue.js 控制逻辑 -->
+<script>
+</script>
+
+</body>
+</html>
